@@ -1,0 +1,76 @@
+---
+  
+# Get the vedge info from vManage - only get valid devices so that keys like 'host-name' are present.
+- name: "# Get edge device info from vManage"
+  uri:
+    url: "https://{{ ansible_host }}/dataservice/system/device/vedges/?validity=valid"
+    method: GET
+    headers:
+      Cookie: "{{ login_result.set_cookie }}"
+    validate_certs: no
+    return_content: yes
+  register: software_result
+
+# - debug: var=software_result.json.data
+
+# Validate that for each device in the input list, each version is in the availableVersions list for the device
+# The validatedDeviceDictList list will contain each device, along with valid versions or skipped versions.
+- name: "# Validate that input versions are installed"
+  ansible.builtin.set_fact:
+    validatedDeviceDictList: "{{ deviceDictList |  validate_versions(software_result.json.data) }}"
+
+# - debug: var=validatedDeviceDictList
+
+# Generate the POST body, send the POST, and receive the jobID as response.
+- name: "# Delete Version(s) on Edge Router"
+  viptela_api_delete_version:
+    vmanage: "{{ ansible_host }}"
+    cookie: "{{ login_result.set_cookie }}"
+    token: "{{ token_result.content }}"
+    device_list: "{{ validatedDeviceDictList }}"
+  register: deleteVersion_result
+- debug: var=deleteVersion_result.last_status
+
+# Keep retrying to get the info from the job until the status is 'done'.
+- name: "# Get default version status and repeat until Complete - FAILED == In Progress"
+  uri:
+    method: GET
+    url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ deleteVersion_result.last_status }}"
+    headers:
+      Cookie: "{{ login_result.set_cookie }}"
+    validate_certs: no
+    return_content: yes
+  register: deleteVersion_status
+  until: deleteVersion_status.json.summary.status == 'done'
+  retries: 60
+  delay: 60
+
+# Get the device info for valid vedges again to be able to validate the versions were deleted.
+- name: "# Get Device info from vManage to verify deletion"
+  uri:
+    url: "https://{{ ansible_host }}/dataservice/system/device/vedges/?validity=valid"
+    method: GET
+    headers:
+      Cookie: "{{ login_result.set_cookie }}"
+    validate_certs: no
+    return_content: yes
+  register: post_delete_result
+
+# - debug: var=post_delete_result.json.data
+
+# - debug: 
+#     msg="{{ post_delete_result.json.data | selectattr('host-name', 'equalto', 'vedge-20-3-1') }}"
+
+# For each device in the validatedDeviceList, loop through the external tasks, passing in the device info 
+# for the device where the hostname matches.  The external tasks will validate that the versions were removed.
+- name: "# Validate version removal successful"
+  ansible.builtin.include_tasks:
+    file: "validate_software_removal.yml"
+  vars:
+    postDeleteResultItem: "{{ post_delete_result.json.data | selectattr('host-name', 'equalto', postDeleteItem['hostname']) }}"
+  loop: "{{ validatedDeviceDictList }}"
+  loop_control:
+    loop_var: postDeleteItem
+    label: postDeleteItem['hostname']
+
+

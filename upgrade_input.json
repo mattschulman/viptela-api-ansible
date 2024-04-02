@@ -1,0 +1,7 @@
+{
+  "Actions": {
+    "install-image": false,
+    "activate-version": true,
+    "set-default-version": true
+  }
+}

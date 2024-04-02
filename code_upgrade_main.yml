@@ -1,0 +1,87 @@
+---
+- hosts: all
+  connection: local
+  gather_facts: no
+  vars:
+    # Read in the input file and convert to JSON
+    inputDict: "{{ lookup('file', './upgrade_input.json') | from_json }}"
+
+
+  tasks:
+    - name: "# Validate action inputs"
+      debug: var=inputDict
+
+    # Read in the CSV file and convert to a dictionary called deviceDict.
+    - name: "# Read device_input.csv file and convert to dictionary"
+      set_fact:
+        deviceDict: "{{ 'upgrade_device_input.csv' | csv_to_device_dict }}"
+
+    # - debug: var=deviceDict
+
+    # Authenticate to vManage with creds and obtain the cookie and the XSRF token
+    - name: "# Get vManage Cookie and Token"
+      include_role:
+        name: "vmanage_authenticate"
+
+    # Get get the vEdge info so that the UUID and systemIP can be obtained and added to the deviceDictList
+    # Only get valid vedges so that keys like 'host-name' are available.
+    - name: "# Get vEdge device info"
+      uri:
+        url: "https://{{ ansible_host }}/dataservice/system/device/vedges?validity=valid"
+        method: GET
+        headers: 
+          Cookie: "{{ login_result.set_cookie }}"
+        validate_certs: no
+        return_content: yes
+      register: devices_result
+
+    # Parse the results and set the UUID and systemIP for each device
+    - name: "# Parse device info and populate Device IDs into deviceDict"
+      set_fact:
+        deviceDictList: "{{ deviceDict | parse_device_info(devices_result) }}"
+
+    # - debug: var=deviceDictList[0]
+
+    # When the install action is enabled.
+    - block:
+      # Becuase the Install API can only do one version per request, create a list of unique versions from the input CSV file
+      # We will loop through the versions and send an API call per version, with the appropriate devices to be upgraded to that version.
+      - name: "# Create list of inputed software versions"
+        set_fact:
+          software_list: "{{ software_list | default([]) + [item['version']]  }}"
+        loop: "{{ deviceDictList }}"
+        loop_control:
+          label: "{{ item['version'] }}"
+
+      # - debug: var=software_list
+
+      # Gather a unique list of versions
+      - name: "# Create unique list of inputted software versions"
+        set_fact:
+          unique_software_list: "{{ software_list | unique }}"
+
+      # - debug: var=unique_software_list
+
+      # Loop through the Versions and make an API call per version.  
+      # The role will take care of sending the appropriate devices in each request.
+      - name: "# Install Software on Edge Router and Activate if configured"
+        include_role:
+          name: viptela_API_software_install
+        vars:
+          versionToInstall: "{{ item }}"
+        loop: "{{ unique_software_list }}"
+
+      when: inputDict['Actions']['install-image']
+    
+    # When the activate action is enabled only (the version could have been activated in the install action)
+    - name: "# Activate Software only on Edge Router"
+      include_role:
+        name: viptela_API_activate_version
+      when: inputDict['Actions']['activate-version'] and not inputDict['Actions']['install-image']
+
+    # When the set-default action is enabled.
+    - name: "# Set Default Version on vEdge"
+      include_role:
+        name: viptela_API_set_default_version
+      when: inputDict['Actions']['set-default-version']
+    

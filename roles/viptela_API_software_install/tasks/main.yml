@@ -1,0 +1,84 @@
+---
+# Get the software repository info from vManage
+- name: "# Get software versions"
+  include_role:
+    name: vmanage_get_software_versions
+
+# - debug: 
+#     msg: "Normalized Version: {{ versionToInstall | normalize_version }}"
+
+# Validate that the versionToInstall is in the repository
+- name: "# Validate File is in vManage Software Repository"
+  assert:
+    that:
+      - software_repo.json.data | selectattr('versionName', 'equalto', versionToInstall) | list | count > 0
+    success_msg: "{{ versionToInstall }} is in vManage Software Repository"
+    fail_msg: "{{ versionToInstall }} is not in vManage Software Repository"
+    # quiet: true
+  ignore_errors: true
+
+# Only proceed if the version is available on vManage
+- block:
+  # Build the POST body and send the POST to vManage.  Get the jobID returned.
+  - name: "# Install Image to vEdge"
+    viptela_api_software_install:
+      vmanage: "{{ ansible_host }}"
+      cookie: "{{ login_result.set_cookie }}"
+      token: "{{ token_result.content }}"
+      version: "{{ versionToInstall }}"
+      device_list: "{{ deviceDictList }}"
+      reboot: "{{ inputDict['Actions']['activate-version'] }}"
+    register: install_result
+  - debug: var=install_result.last_status
+
+  # Keep fetching the job information until the status is 'done'.
+  - name: "# Get install status and repeat until Complete - FAILED == In Progress"
+    uri:
+      method: GET
+      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ install_result.last_status }}"
+      headers:
+        Cookie: "{{ login_result.set_cookie }}"
+      validate_certs: no
+      return_content: yes
+    register: install_status
+    until: install_status.json.summary.status == 'done'
+    retries: 60
+    delay: 60
+    # failed_when: install_status.json.data[0].status == "Failed"
+
+  # - debug:
+  #     msg:
+  #       currentActivity: "{{ install_status.json.data[0].currentActivity }}"
+  #       status: "{{ install_status.json.data[0].status }}" 
+  #       activity: "{{ install_status.json.data[0].activity }}"
+
+  # - debug: var=deviceDictList
+
+  # Get the vedge info from vManage.  Get only valid vEdges so that keys like 'host-name' will be present.
+  - name: "# Get edge device info from vManage"
+    uri:
+      url: "https://{{ ansible_host }}/dataservice/system/device/vedges/?validity=valid"
+      method: GET
+      headers:
+        Cookie: "{{ login_result.set_cookie }}"
+      validate_certs: no
+      return_content: yes
+    register: post_install_software_result
+
+  # - debug:
+  #     msg: "{{ post_install_software_result.json.data | selectattr('host-name', 'equalto', postInstallItem['hostname']) }}"
+
+  # For each item in the deviceDictList, if the version is equal to versionToInstall, loop through the external tasks, passing in the device info matching the hostname.
+  # This will validate that the version shows up in the 'availableVersions' list for the device or is the active version if activate was set to True.
+  - name: "# Validate software install"
+    ansible.builtin.include_tasks:
+      file: "validate_software_install.yml"
+    vars:
+      postInstallResultItem: "{{ post_install_software_result.json.data | selectattr('host-name', 'equalto', postInstallItem['hostname']) }}"
+    loop: "{{ deviceDictList }}"
+    loop_control:
+      loop_var: postInstallItem
+      label: postInstallItem['hostname']
+    when: postInstallItem['version'] == versionToInstall
+
+  when: software_repo.json.data | selectattr('versionName', 'equalto', versionToInstall) | list | count > 0

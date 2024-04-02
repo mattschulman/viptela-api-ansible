@@ -1,0 +1,12 @@
+---
+- name: get devID of vEdge
+  tags: getdevid
+  uri:
+    url: "https://{{ ansible_host }}/dataservice/system/device/vedges?deviceIP={{ vEdge_systemIP }}"
+    method: GET
+    headers: 
+      Cookie: "{{ login_result.set_cookie }}"
+    validate_certs: no
+    return_content: yes
+  register: device_result
+- debug: var=device_result.json.data[0].uuid

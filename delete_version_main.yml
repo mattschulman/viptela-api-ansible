@@ -1,0 +1,42 @@
+---
+- hosts: all
+  connection: local
+  gather_facts: no
+
+  tasks:
+
+    # Read in the CSV file and convert to a dictionary called deviceDict.
+    - name: "# Read device_input.csv file and convert to dictionary"
+      set_fact:
+        deviceDict: "{{ 'delete_version_device_input.csv' | csv_to_device_dict | deleteVersions_to_list }}"
+
+    # - debug: var=deviceDict
+
+    # Authenticate to vManage with creds and obtain the cookie and the XSRF token
+    - name: "# Get vManage Cookie and Token"
+      include_role:
+        name: "vmanage_authenticate"
+
+    # Get get the vEdge info so that the UUID and systemIP can be obtained and added to the deviceDictList
+    # Only get valid vedges so that keys like 'host-name' are available.
+    - name: "# Get vEdge device info"
+      uri:
+        url: "https://{{ ansible_host }}/dataservice/system/device/vedges?validity=valid"
+        method: GET
+        headers: 
+          Cookie: "{{ login_result.set_cookie }}"
+        validate_certs: no
+        return_content: yes
+      register: devices_result
+
+    # Parse the results and set the UUID and systemIP for each device
+    - name: "# Parse device info and populate Device IDs into deviceDict"
+      set_fact:
+        deviceDictList: "{{ deviceDict | parse_device_info(devices_result) }}"
+
+    # - debug: var=deviceDictList
+    
+    # Run the viptela_API_delete_version role
+    - name: "# Remove Verions from Edge Router"
+      include_role:
+        name: viptela_API_delete_version

@@ -1,0 +1,13 @@
+---
+# Get the software repository info from vManage
+- name: "# Get Software Repository Info"
+  uri:
+    method: GET
+    url: "https://{{ ansible_host }}/dataservice/device/action/software"
+    headers:
+      Cookie: "{{ login_result.set_cookie }}"
+    validate_certs: no
+    return_content: yes
+  register: software_repo
+
+# - debug: var=software_repo

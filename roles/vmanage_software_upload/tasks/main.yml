@@ -1,0 +1,10 @@
+---
+- name: Upload software image to vManage
+  viptela_software_upload:
+    vmanage: "{{ ansible_host }}"
+    cookie: "{{ login_result.set_cookie }}"
+    token: "{{ token_result.content }}"
+    fileName: "{{ srcPath }}/{{ fileName }}"
+  register: upload_result
+  tags: upload
+- debug: var=upload_result

@@ -1,0 +1,32 @@
+---
+- hosts: all
+  gather_facts: no
+  connection: local
+
+  tasks:
+    - name: Get vManage Cookie
+      uri:
+        url: "https://{{ ansible_host }}/j_security_check"
+        method: POST
+        body:
+          j_username: "{{ ansible_user }}"
+          j_password: "{{ ansible_password }}"
+        body_format: form-urlencoded
+        validate_certs: no
+      register: login_result
+      tags:
+        - authenticate
+    - debug: var=login_result.set_cookie
+
+    - name: Get XSRF Token
+      uri:
+        url: "https://{{ ansible_host }}/dataservice/client/token"
+        method: GET
+        headers:
+          Cookie: "{{ login_result.set_cookie }}"
+        validate_certs: no
+        return_content: yes
+      register: token_result
+      tags:
+        - authenticate
+    - debug: var=token_result.content

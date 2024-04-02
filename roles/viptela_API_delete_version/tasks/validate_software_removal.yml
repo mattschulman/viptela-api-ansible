@@ -1,0 +1,14 @@
+---
+# - debug: var=postDeleteItem
+# - debug: var=postDeleteResultItem[0]['availableVersions']
+
+# For each version, verify that it no longer shows up in the 'availableVersions' list for the device
+- name: "# Verify that version was removed on Edge Router"
+  assert:
+    that: versionItem not in postDeleteResultItem[0]['availableVersions']
+    success_msg: "{{ versionItem }} was successfully removed from {{ postDeleteItem['hostname'] }}"
+    fail_msg: "{{ versionItem }} was not removed from {{ postDeleteItem['hostname'] }}"
+  ignore_errors: true
+  loop: "{{ postDeleteItem['versionsToDelete'] }}"
+  loop_control:
+    loop_var: versionItem

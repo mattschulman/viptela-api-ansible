@@ -1,0 +1,15 @@
+---
+# - debug: var=device
+# - debug: 
+#     msg: "Normalized Verison: {{ device['version'] | normalize_version }}"
+
+# - debug: var=postSetDefaultResultItem
+
+# Validate that the input version is the default version
+- name: "# Verify that version is default on Edge Router"
+  assert:
+    that: post_setDefault_Item['version'] in postSetDefaultResultItem.0.defaultVersion
+    success_msg: "{{ post_setDefault_Item['version'] }} is the default version on Edge Router {{ post_setDefault_Item['hostname'] }}"
+    fail_msg: "{{ post_setDefault_Item['version'] }} is not the default version on Edge Router {{ post_setDefault_Item['hostname'] }}"
+    # quiet: true
+  ignore_errors: true

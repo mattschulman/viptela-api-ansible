@@ -1,0 +1,5 @@
+.DS_Store
+test_*
+__pycache__
+venv/
+hosts

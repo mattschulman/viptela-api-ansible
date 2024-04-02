@@ -1,0 +1,25 @@
+---
+# - debug: 
+#     msg: "Normalized Version: {{ versionToInstall | normalize_version }}"
+
+# - debug: var=postInstallResultItem
+
+# Validate that the version is in the availableVersions list or is the active version.
+# The custom filter normalize_version is used to shorten the IOS-XE version string so that it will match.
+- name: "# Verify that new version is installed on Edge Router"
+  assert:
+    that: (versionToInstall | normalize_version) in postInstallResultItem.0.availableVersions or (versionToInstall | normalize_version) in postInstallResultItem.0.version
+    success_msg: "{{ versionToInstall | normalize_version }} is installed on Edge Router {{ postInstallItem['hostname'] }}"
+    fail_msg: "{{ versionToInstall | normalize_version }} is not installed on Edge Router {{ postInstallItem['hostname'] }}"
+    # quiet: true
+
+
+# Validate that the version is the active version.
+# The custom filter normalize_version is used to shorten the IOS-XE version string so that it will match.
+- name: "# Verify that new version is activated on Edge Router"
+  assert:
+    that: (versionToInstall | normalize_version) in postInstallResultItem.0.version
+    success_msg: "{{ versionToInstall | normalize_version }} is activated on vEdge {{ postInstallItem['hostname'] }}"
+    fail_msg: "{{ versionToInstall | normalize_version }} is not activated on vEdge {{ postInstallItem['hostname'] }}"
+    # quiet: true
+  when: inputDict['Actions']['activate-version'] 

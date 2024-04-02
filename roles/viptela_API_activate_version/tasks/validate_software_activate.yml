@@ -1,0 +1,17 @@
+---
+# - debug: var=device
+# - debug: 
+#     msg: "Normalized Verison: {{ device['version'] | normalize_version }}"
+
+# - debug: var=software_result.json.data[0].version
+
+# - debug: var=postActivateResultItem
+
+# Validate that the input version is the active version
+- name: "# Verify that new version is activated on Edge Router"
+  assert:
+    that: postActivateItem['version'] in postActivateResultItem.0.version
+    success_msg: "{{ postActivateItem['version'] }} is activated on vEdge {{ postActivateItem['hostname'] }}"
+    fail_msg: "{{ postActivateItem['version'] }} is not activated on vEdge {{ postActivateItem['hostname'] }}"
+    # quiet: true
+  ignore_errors: true
