@@ -54,7 +54,7 @@
       when: validFileList|length > 0
       
     # If there are items in the skippedFileList, display them
-    - name: "# Show Skipped File List"
+    - name: "# Show files that already existed on vManage so were skipped "
       debug:
         msg: "{{ skippedFileList }}"
       when: skippedFileList|length > 0

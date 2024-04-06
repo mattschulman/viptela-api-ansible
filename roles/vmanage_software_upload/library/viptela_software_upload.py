@@ -19,8 +19,12 @@ options:
         description: XSRF Token to authenticate to vManage
         required: true
         type: str
+    srcPath:
+        description: path to the file to be uploaded to vManage.
+        required: true
+        type: str
     fileName:
-        description: path and name of file to be uploaded to vManage.
+        description: name of file to be uploaded to vManage.
         required: true
         type: str
     debug:
@@ -49,12 +53,15 @@ class ViptelaAPI(object):
   ''' Viptela API Operations'''
 
   # Public Methods
-  def __init__(self, vmanage, cookie, token, fileName, debug = False):
+  def __init__(self, vmanage, cookie, token, srcPath, fileName, debug = False):
     self.vmanage = vmanage
     self.cookie = cookie
     self.token = token
+    self.srcPath = srcPath
     self.fileName = fileName
     self.statusCode = ""
+
+    self.fullPath = self.srcPath + '/' + self.fileName
 
     self.debug = {
       "enabled": debug,
@@ -88,7 +95,9 @@ class ViptelaAPI(object):
     self.print_debug(" -- vmanage: ", self.vmanage, 1)
     self.print_debug(" -- cookie: ", self.cookie, 1)
     self.print_debug(" -- token: ",self.token, 1)
+    self.print_debug(" -- srcPath: ", self.srcPath,1)
     self.print_debug(" -- fileName: ", self.fileName, 1)
+    self.print_debug(" -- fullPath: ", self.fullPath, 1)
 
     urllib3.disable_warnings()
 
@@ -102,13 +111,14 @@ class ViptelaAPI(object):
     }
 
     files = [
-       ('file', (self.fileName, open(self.fileName, 'rb'), 'application/octet-stream'))
+       ('file', (self.fileName, open(self.fullPath, 'rb'), 'application/octet-stream'))
     ]
 
     headers = {
        'X-XSRF-TOKEN': self.token,
        'Cookie': self.cookie
     }
+  
 
     self.print_debug("  -- headers: ", headers, 1)
 
@@ -130,6 +140,7 @@ def main():
     "vmanage": { "type": 'str', "required": True },
     "cookie": { "type": 'str', "required": True },
     "token": { "type": 'str', "required": True },
+    "srcPath": { "type": 'str', "required": True },
     "fileName": { "type": 'str', "required": True },
     "debug": { "type": 'bool', "required": False }
   }
@@ -145,6 +156,7 @@ def main():
     module.params['vmanage'],
     module.params['cookie'],
     module.params['token'],
+    module.params['srcPath'],
     module.params['fileName'],
     module.params['debug']
   )

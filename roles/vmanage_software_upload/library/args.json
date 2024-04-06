@@ -3,7 +3,8 @@
     "vmanage": "vmanage1",
     "cookie": "",
     "token": "",
-    "fileName": "",
+    "srcPath": "/Users/matt/Downloads",
+    "fileName": "viptela-20.3.8-x86_64.tar.gz",
     "debug": true
   }
 }
