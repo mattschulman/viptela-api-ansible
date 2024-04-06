@@ -11,40 +11,54 @@
     return_content: yes
   register: pre_activate_software_result
 
-# - debug: var=deviceDictList
+- debug: var=deviceDictList
 
 # - debug: var=pre_activate_software_result.json.data
 
 # Validate that for each device in the input list, the version is in the availableVersions list for the device.
-# The validatedDeviceDictList list will only contain devices that have versions that can be activated.
+# The validatedActivateVersionDeviceDictList list will only contain devices that have versions that can be activated.
 - name: "# Validate that input versions are installed"
   ansible.builtin.set_fact:
-    validatedDeviceDictList: "{{ deviceDictList |  validate_versions(pre_activate_software_result.json.data) }}"
+    validatedActivateVersionDeviceDictList: "{{ deviceDictList |  validate_activate_versions(pre_activate_software_result.json.data) }}"
 
-# - debug: var=validatedDeviceDictList
+# - debug: var=validatedActivateVersionDeviceDictList
 
 # For devices that the input version is not valid, generate a list of skipped devices to be displayed at the end.
 - name: "# Generate Skipped device list for devices that do not have the version installed"
   ansible.builtin.set_fact:
-    skippedDeviceDictList: "{{ deviceDictList |  create_skipped_versions(pre_activate_software_result.json.data) }}"
+    skippedActivateDeviceDictList: "{{ deviceDictList |  create_skipped_activate_versions(pre_activate_software_result.json.data) }}"
 
-# If there are entries in the validatedDeviceDictList:
-- block:  
-  # Build the POST body and send to vManage, getting the jobID back.
-  - name: "# Activate Version on vEdge"
-    viptela_api_activate_version:
-      vmanage: "{{ ansible_host }}"
-      cookie: "{{ login_result.set_cookie }}"
-      token: "{{ token_result.content }}"
-      device_list: "{{ validatedDeviceDictList }}"
+# If there are entries in the validatedActivateVersionDeviceDictList:
+- block:
+
+  # Build the POST Body
+  - name: "# Generate the body for the Activate POST Message"
+    ansible.builtin.set_fact:
+      payloadDict: "{{ validatedActivateVersionDeviceDictList | generate_activate_payload }}"
+
+  - debug: var=payloadDict
+
+  # Build the POST and send to vManage, getting the jobID back.
+  - name: "# Activate Version on Edge Router"
+    uri:
+      method: POST
+      url: "https://{{ ansible_host }}/dataservice/device/action/changepartition"
+      headers:
+        Cookie: "{{ login_result.set_cookie }}"
+        X-XSRF-TOKEN: "{{ token_result.content }}"
+        Content-Type: 'application/json'
+      body_format: json
+      body: "{{ payloadDict }}"
+      validate_certs: no
     register: activate_result
-  - debug: var=activate_result.last_status
+  
+  - debug: var=activate_result.json.id
 
   # Keep querying the jobID until the status is 'done'.
   - name: Get activate status and repeat until Complete - FAILED == In Progress
     uri:
       method: GET
-      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ activate_result.last_status }}"
+      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ activate_result.json.id }}"
       headers:
         Cookie: "{{ login_result.set_cookie }}"
       validate_certs: no
@@ -53,6 +67,12 @@
     until: activate_status.json.summary.status == 'done'
     retries: 60
     delay: 60
+
+  - debug:
+      msg:
+        currentActivity: "{{ activate_status.json.data[0].currentActivity }}"
+        status: "{{ activate_status.json.data[0].status }}"
+        activity: "{{ activate_status.json.data[0].activity }}"
 
   # Get the valid vedge device info again so that the activations can be verified.
   - name: "# Get edge device info from vManage"
@@ -65,22 +85,22 @@
       return_content: yes
     register: post_activate_software_result
 
-  # - debug: var=validatedDeviceDictList
+  # - debug: var=validatedActivateVersionDeviceDictList
 
-  # Loop through the devices in the validatedDeviceDictList, run the external tasks, passing in the device data for the hostname
+  # Loop through the devices in the validatedActivateVersionDeviceDictList, run the external tasks, passing in the device data for the hostname
   # for the device in the loop.
   - name: "# Validate software activation"
     ansible.builtin.include_tasks:
       file: "validate_software_activate.yml"
     vars:
-      postActivateResultItem: "{{ post_activate_software_result.json.data | selectattr('host-name', 'equalto', postActivateItem['hostname']) }}"
-    loop: "{{ validatedDeviceDictList }}"
+      postActivateResultItem: "{{ post_activate_software_result.json.data | selectattr('host-name', 'defined') | selectattr('host-name', 'equalto', postActivateItem['hostname']) | list }}"
+    loop: "{{ validatedActivateVersionDeviceDictList }}"
     loop_control:
       loop_var: postActivateItem
       label: postActivateItem['hostname']
       
-  when: validatedDeviceDictList
+  when: validatedActivateVersionDeviceDictList|length > 0
 
 # Print the skipped list if any devices were skipped
-- debug: var=skippedDeviceDictList
-  when: skippedDeviceDictList
+- debug: var=skippedActivateDeviceDictList
+  when: skippedActivateDeviceDictList|length > 0

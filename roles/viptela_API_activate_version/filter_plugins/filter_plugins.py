@@ -10,8 +10,9 @@ class FilterModule(object):
   def filters(self):
     return {
       'normalize_version': self.normalize_version,
-      'validate_versions': self.validate_versions,
-      'create_skipped_versions': self.create_skipped_versions
+      'validate_activate_versions': self.validate_activate_versions,
+      'create_activate_skipped_versions': self.create_activate_skipped_versions,
+      'generate_activate_payload': self.generate_activate_payload
     }
   
   def normalize_version(self, version):
@@ -28,7 +29,7 @@ class FilterModule(object):
     normalized_version = '.'.join(normalized_version_list)
     return normalized_version
     
-  def validate_versions(self, device_list, vmanage_software_list):
+  def validate_activate_versions(self, device_list, vmanage_software_list):
     # Go through each device in self.device_list, and validate that the version is in the list of availableVersions
     new_device_list = []
     skipped_device_list = []
@@ -36,14 +37,15 @@ class FilterModule(object):
       device['version'] = self.normalize_version(device['version'])
       for dev in vmanage_software_list:
       # Find the record that contains the device['systemIP']
-        if device['systemIP'] == dev['system-ip']:
-          if device['version'] in dev['availableVersions']:
-            new_device_list.append(device)
-          else:
-            skipped_device_list.append(device)
+        if 'system-ip' in dev:
+          if device['systemIP'] == dev['system-ip']:
+            if device['version'] in dev['availableVersions']:
+              new_device_list.append(device)
+            else:
+              skipped_device_list.append(device)
     return new_device_list
   
-  def create_skipped_versions(self, device_list, vmanage_software_list):
+  def create_activate_skipped_versions(self, device_list, vmanage_software_list):
     # Go through each device in self.device_list, and validate that the version is in the list of availableVersions
     new_device_list = []
     skipped_device_list = []
@@ -51,11 +53,30 @@ class FilterModule(object):
       device['version'] = self.normalize_version(device['version'])
       for dev in vmanage_software_list:
       # Find the record that contains the device['systemIP']
-        if device['systemIP'] == dev['system-ip']:
-          if device['version'] in dev['availableVersions']:
-            new_device_list.append(device)
-          else:
-            skipped_device_list.append(device)
+        if 'system-ip' in dev:
+          if device['systemIP'] == dev['system-ip']:
+            if device['version'] in dev['availableVersions']:
+              new_device_list.append(device)
+            else:
+              skipped_device_list.append(device)
     return skipped_device_list
+  
+  def generate_activate_payload(self, device_list):
+    # Create the payload structure as a dictionary.  The devices list will be appended in a for loop.
+    payloadDict = {
+      'action': 'changepartition',
+      'devices': [],
+      'deviceType': 'vedge'
+    }
     
+    # Generate the devices key as a list of device IPs and device IDs.
+    for device in device_list:
+      activateDeviceList = {
+        'version': self.normalize_version(device['version']),
+        'deviceIP': device['systemIP'],
+        'deviceId': device['deviceID']
+      }
+      payloadDict['devices'].append(activateDeviceList)
+
+    return payloadDict
       

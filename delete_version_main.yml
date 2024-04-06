@@ -10,7 +10,7 @@
       set_fact:
         deviceDict: "{{ 'delete_version_device_input.csv' | csv_to_device_dict | deleteVersions_to_list }}"
 
-    # - debug: var=deviceDict
+    - debug: var=deviceDict
 
     # Authenticate to vManage with creds and obtain the cookie and the XSRF token
     - name: "# Get vManage Cookie and Token"

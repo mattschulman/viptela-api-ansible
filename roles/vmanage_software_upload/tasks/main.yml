@@ -1,10 +1,67 @@
 ---
-- name: Upload software image to vManage
-  viptela_software_upload:
-    vmanage: "{{ ansible_host }}"
-    cookie: "{{ login_result.set_cookie }}"
-    token: "{{ token_result.content }}"
-    fileName: "{{ srcPath }}/{{ fileName }}"
+
+# Build the POST message and send to vManage, getting the jobID back.
+# Generate the full file path and name
+- name: "# Build filePathAndName variable"
+  ansible.builtin.set_fact:
+    filePathAndName: "{{ srcPath }}/{{ fileName }}"
+
+- debug: var=filePathAndName
+
+
+#  Do it with cURL
+- name: "# Upload file to vmanage using cURL"
+  ansible.builtin.shell: "curl -k -X POST --location 'https://{{ ansible_host }}/dataservice/device/action/software/package' \\
+   --header 'Cookie: {{ login_result.set_cookie }}' --header 'X-XSRF-TOKEN: {{ token_result.content }}' \\
+   --form 'Content-Type=\"application/x-gzip\"' \\
+   --form 'validity=\"valid\"' \\
+   --form 'upload=\"true\"' \\
+   --form 'file=@\"{{ filePathAndName }}\"'"
   register: upload_result
-  tags: upload
-- debug: var=upload_result
+
+- debug: var=upload_result.stderr_lines
+
+# Do it with Custom Python Module
+# - name: Upload software image to vManage
+#   viptela_software_upload:
+#     vmanage: "{{ ansible_host }}"
+#     cookie: "{{ login_result.set_cookie }}"
+#     token: "{{ token_result.content }}"
+#     fileName: "{{ srcPath }}/{{ fileName }}"
+#   register: upload_result
+#   tags: upload
+# - debug: var=upload_result
+
+# Does not work with url module
+# - name: "# Upload file to vManage Software Repository"
+#   uri:
+#     method: POST
+#     url: "https://{{ ansible_host }}/dataservice/device/action/software/package"
+#     headers:
+#       Cookie: "{{ login_result.set_cookie }}"
+#       X-XSRF-TOKEN: "{{ token_result.content }}"
+#     body_format: form-multipart
+#     # src: "{{ srcPath }}/{{ fileName }}"
+#     body:
+#       validity: 'valid'
+#       upload: 'true'
+#       file: "{{ lookup('file', filePathAndName) }}"
+#       Content-Type: 'application/x-gzip'
+#     validate_certs: no
+#   register: upload_result
+
+# Get the software repository info from vManage
+- name: "# Get software versions"
+  include_role:
+    name: vmanage_get_software_versions
+
+# - debug: var=software_repo.json.data
+
+# Validate File was uploaded
+- name: "# Validate that file was uploaded"
+  ansible.builtin.assert:
+    that: fileName | validate_file_upload(software_repo.json.data)
+    success_msg: "{{ fileName }} was successfully uploaded to vManage"
+    fail_msg: "{{ fileName }} was not successfully uploaded to vManage"
+  ignore_errors: true
+

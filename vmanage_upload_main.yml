@@ -1,0 +1,60 @@
+---
+- hosts: all
+  gather_facts: no
+  connection: local
+
+  tasks:
+    # Read in the CSV file and convert to a dictionary called deviceDict.
+    - name: "# Read device_input.csv file and convert to dictionary"
+      set_fact:
+        fileList: "{{ 'vmanage_upload_input.csv' | csv_to_device_dict }}"
+
+    - debug: var=fileList
+
+    # Authenticate to vManage with creds and obtain the cookie and the XSRF token
+    - name: "# Get vManage Cookie and Token"
+      include_role:
+        name: "vmanage_authenticate"
+
+    # Get the software repository info from vManage
+    - name: "# Get software versions"
+      include_role:
+        name: vmanage_get_software_versions
+    
+    # - debug: var=software_repo.json.data
+
+    # For each file in the input fileList, validate that it is not already in the repository
+    # If it is not in the repository, add to the validFileList.
+    - name: "# Create Valid file list"
+      ansible.builtin.set_fact:
+        validFileList: "{{ fileList | validate_files(software_repo.json.data) }}"
+
+    - debug: var=validFileList
+
+    # For each file in the input fileList, validate that it is not already in the repository
+    # If it is in the repository, add to the skippedFileList.
+    - name: "# Create Skipped file list"
+      ansible.builtin.set_fact:
+        skippedFileList: "{{ fileList | generate_skipped_file_list(software_repo.json.data) }}"
+
+    # If there are valid files, for each valid file, run the vmanage_software_upload role,
+    # passing in the srcPath and fileName fields from the input csv.
+    - block:
+      - name: "# Run vManage Upload Role for each file in fileDict"
+        include_role:
+          name: "vmanage_software_upload"
+        vars:
+          srcPath: "{{ uploadFile.srcPath }}"
+          fileName: "{{ uploadFile.fileName }}"
+        loop: "{{ validFileList }}"
+        loop_control:
+          loop_var: uploadFile
+          label: uploadFle.fileName
+      
+      when: validFileList|length > 0
+      
+    # If there are items in the skippedFileList, display them
+    - name: "# Show Skipped File List"
+      debug:
+        msg: "{{ skippedFileList }}"
+      when: skippedFileList|length > 0

@@ -19,23 +19,35 @@
 
 # Only proceed if the version is available on vManage
 - block:
-  # Build the POST body and send the POST to vManage.  Get the jobID returned.
-  - name: "# Install Image to vEdge"
-    viptela_api_software_install:
-      vmanage: "{{ ansible_host }}"
-      cookie: "{{ login_result.set_cookie }}"
-      token: "{{ token_result.content }}"
-      version: "{{ versionToInstall }}"
-      device_list: "{{ deviceDictList }}"
-      reboot: "{{ inputDict['Actions']['activate-version'] }}"
+
+  # Build the POST body
+  - name: "# Generate the body for the Install POST Message"
+    ansible.builtin.set_fact:
+      payloadDict: "{{ foo | generate_install_payload(versionToInstall, deviceDictList, inputDict['Actions']['activate-version'] ) }}"
+
+  - debug: var=payloadDict
+
+  # Build and send the POST to vManage.  Get the jobID returned.
+  - name: "# Install image to Edge Router"
+    uri:
+      method: POST
+      url: "https://{{ ansible_host }}/dataservice/device/action/install"
+      headers:
+        Cookie: "{{ login_result.set_cookie }}"
+        X-XSRF-TOKEN: "{{ token_result.content }}"
+        Content-Type: 'application/json'
+      body_format: json
+      body: "{{ payloadDict }}"
+      validate_certs: no
     register: install_result
-  - debug: var=install_result.last_status
+
+  - debug: var=install_result.json.id
 
   # Keep fetching the job information until the status is 'done'.
   - name: "# Get install status and repeat until Complete - FAILED == In Progress"
     uri:
       method: GET
-      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ install_result.last_status }}"
+      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ install_result.json.id }}"
       headers:
         Cookie: "{{ login_result.set_cookie }}"
       validate_certs: no
@@ -46,11 +58,11 @@
     delay: 60
     # failed_when: install_status.json.data[0].status == "Failed"
 
-  # - debug:
-  #     msg:
-  #       currentActivity: "{{ install_status.json.data[0].currentActivity }}"
-  #       status: "{{ install_status.json.data[0].status }}" 
-  #       activity: "{{ install_status.json.data[0].activity }}"
+  - debug:
+      msg:
+        currentActivity: "{{ install_status.json.data[0].currentActivity }}"
+        status: "{{ install_status.json.data[0].status }}" 
+        activity: "{{ install_status.json.data[0].activity }}"
 
   # - debug: var=deviceDictList
 
@@ -74,7 +86,7 @@
     ansible.builtin.include_tasks:
       file: "validate_software_install.yml"
     vars:
-      postInstallResultItem: "{{ post_install_software_result.json.data | selectattr('host-name', 'equalto', postInstallItem['hostname']) }}"
+      postInstallResultItem: "{{ post_install_software_result.json.data | selectattr('host-name', 'defined') | selectattr('host-name', 'equalto', postInstallItem['hostname']) | list }}"
     loop: "{{ deviceDictList }}"
     loop_control:
       loop_var: postInstallItem

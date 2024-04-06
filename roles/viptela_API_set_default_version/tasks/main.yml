@@ -11,35 +11,48 @@
   register: pre_setDefault_software_result
 
 # Validate that for each device in the input list, the version is in the availableVersions list for the device or 
-# is the active version.  The validatedDeviceDictList list will only contain devices that have versions that can be set to default.
+# is the active version.  The validatedSetDefaultVersionDeviceDictList list will only contain devices that have versions that can be set to default.
 - name: "# Validate that input versions are installed"
   ansible.builtin.set_fact:
-    validatedDeviceDictList: "{{ deviceDictList |  validate_versions(pre_setDefault_software_result.json.data) }}"
+    validatedSetDefaultVersionDeviceDictList: "{{ deviceDictList |  validate_setDefault_versions(pre_setDefault_software_result.json.data) }}"
 
-- debug: var=validatedDeviceDictList
+- debug: var=validatedSetDefaultVersionDeviceDictList
 
 # For devices that the input version is not valid, generate a list of skipped devices to be displayed at the end.
 - name: "# Generate Skipped device list for devices that do not have the version installed"
   ansible.builtin.set_fact:
-    skippedDeviceDictList: "{{ deviceDictList |  create_skipped_versions(pre_setDefault_software_result.json.data) }}"
+    skippedSetDefaultDeviceDictList: "{{ deviceDictList |  create_setDefault_skipped_versions(pre_setDefault_software_result.json.data) }}"
 
-# If there are entries in the validatedDeviceDictList:
+# If there are entries in the validatedSetDefaultVersionDeviceDictList:
 - block:
-  # Build the POST body and send to vManage, getting the jobID back.
-  - name: Set Default Version on vEdge
-    viptela_api_set_default_version:
-      vmanage: "{{ ansible_host }}"
-      cookie: "{{ login_result.set_cookie }}"
-      token: "{{ token_result.content }}"
-      device_list: "{{ validatedDeviceDictList }}"
+  # Build the POST body
+  - name: "# Generate the body for the Set Default POST message"
+    ansible.builtin.set_fact:
+      payloadDict: "{{ validatedSetDefaultVersionDeviceDictList | generate_setDefault_payload }}"
+
+  - debug: var=payloadDict
+
+  # Build the POST message and send to vManage, getting the jobID back.
+  - name: "# Set Default Version on Edge Router"
+    uri:
+      method: POST
+      url: "https://{{ ansible_host }}/dataservice/device/action/defaultpartition"
+      headers:
+        Cookie: "{{ login_result.set_cookie }}"
+        X-XSRF-TOKEN: "{{ token_result.content }}"
+        Content-Type: 'application/json'
+      body_format: json
+      body: "{{ payloadDict }}"
+      validate_certs: no
     register: setDefault_result
-  - debug: var=setDefault_result.last_status
+
+  - debug: var=setDefault_result.json.id
 
   # Keep querying the jobID until the status is 'done'.
   - name: Get default version status and repeat until Complete - FAILED == In Progress
     uri:
       method: GET
-      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ setDefault_result.last_status }}"
+      url: "https://{{ ansible_host }}/dataservice/device/action/status/{{ setDefault_result.json.id }}"
       headers:
         Cookie: "{{ login_result.set_cookie }}"
       validate_certs: no
@@ -50,11 +63,11 @@
     delay: 60
 
 
-# - debug:
-#     msg:
-#       currentActivity: "{{ setDefault_status.json.data[0].currentActivity }}"
-#       status: "{{ setDefault_status.json.data[0].status }}" 
-#       activity: "{{ setDefault_status.json.data[0].activity }}"
+  - debug:
+      msg:
+        currentActivity: "{{ setDefault_status.json.data[0].currentActivity }}"
+        status: "{{ setDefault_status.json.data[0].status }}" 
+        activity: "{{ setDefault_status.json.data[0].activity }}"
 
 
   # Get the valid vedge device info again so that the set-default actions can be verified.
@@ -68,20 +81,20 @@
       return_content: yes
     register: post_setDefault_software_result
 
-  # Loop through the devices in the validatedDeviceDictList, run the external tasks, passing in the device data for the hostname
+  # Loop through the devices in the validatedSetDefaultVersionDeviceDictList, run the external tasks, passing in the device data for the hostname
   # for the device in the loop.
   - name: "# Validate set default"
     ansible.builtin.include_tasks:
       file: "validate_set_default.yml"
     vars:
-      postSetDefaultResultItem: "{{ post_setDefault_software_result.json.data | selectattr('host-name', 'equalto', post_setDefault_Item['hostname']) }}"
-    loop: "{{ validatedDeviceDictList }}"
+      postSetDefaultResultItem: "{{ post_setDefault_software_result.json.data | selectattr('host-name', 'defined') | selectattr('host-name', 'equalto', post_setDefault_Item['hostname']) | list }}"
+    loop: "{{ validatedSetDefaultVersionDeviceDictList }}"
     loop_control:
       loop_var: post_setDefault_Item
       label: post_setDefault_Item['hostname']
 
-  when: validatedDeviceDictList
+  when: validatedSetDefaultVersionDeviceDictList|length > 0
 
 # Print the skipped list if any devices were skipped
-- debug: var=skippedDeviceDictList
-  # when: skippedDeviceDictList
+- debug: var=skippedSetDefaultDeviceDictList
+  when: skippedSetDefaultDeviceDictList|length > 0
