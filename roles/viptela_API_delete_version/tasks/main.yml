@@ -93,12 +93,13 @@
 
   when: validatedDeleteVersionDeviceDictList | selectattr('versionsToDelete') | list | length > 0
 
-- debug:
+- name: "# Display skipped versions - Versions that were not deleted"
+  debug:
     msg: "{{ skippedItem['hostname'] }} had the following versions skipped: {{ skippedItem['skippedVersions'] }}"
   loop: "{{ validatedDeleteVersionDeviceDictList }}"
   loop_control:
     loop_var: skippedItem
     label: skippedItem['hostname']
-  when: skippedItem['skippedVersions']
+  when: skippedItem['skippedVersions'] | length > 0
 
 

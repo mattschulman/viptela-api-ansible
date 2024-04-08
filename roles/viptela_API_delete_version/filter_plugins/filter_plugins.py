@@ -67,13 +67,9 @@ class FilterModule(object):
               # print("Skipped!")
               skipped_version_list.append(version)
       
-      #Append the new device list, hostname, systemIP, and deviceID to the new_device_list as dictionary.  
-      # If there were skipped versions for this device, also append it as a dictionary.
-      if skipped_version_list:
-        new_device_list.append({'hostname': device['hostname'],'systemIP': device['systemIP'], 'deviceID': device['deviceID'], 'versionsToDelete': new_version_list, 'skippedVersions': skipped_version_list})
-      else:
-        new_device_list.append({'hostname': device['hostname'],'systemIP': device['systemIP'], 'deviceID': device['deviceID'], 'versionsToDelete': new_version_list })
-        
+      #Append the new device list, hostname, systemIP, deviceID, new_version_list, and skipped_version_list to the new_device_list as dictionary.  
+      new_device_list.append({'hostname': device['hostname'],'systemIP': device['systemIP'], 'deviceID': device['deviceID'], 'versionsToDelete': new_version_list, 'skippedVersions': skipped_version_list})
+      
     return new_device_list
   
   def generate_delete_version_payload(self, device_list):
